@@ -129,3 +129,10 @@ dmypy.json
 .pyre/
 .idea
 .DS_Store
+test_cases/set2
+test_cases/set3
+test_cases/set4
+test_cases/set5
+test_cases/set6
+test_cases/set7
+test_cases/set8

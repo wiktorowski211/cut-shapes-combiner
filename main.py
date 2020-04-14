@@ -9,6 +9,7 @@ from skimage.transform import probabilistic_hough_line, rotate, resize
 from skimage.morphology import skeletonize
 
 THRESHOLD = 150
+SET_RANGES = [6, 20, 20, 20, 20, 200, 200, 20, 100]
 
 
 def is_upside_down(image, line):
@@ -168,8 +169,9 @@ def get_image_characteristic(set_number, image_number):
     return approximated_values, inverted_approximated_values
 
 
-def get_images_characteristics(set_number, set_range):
+def get_images_characteristics(set_number):
     characteristics = []
+    set_range = SET_RANGES[set_number]
 
     for image_number in range(set_range):
         av, iav = get_image_characteristic(set_number, image_number)
@@ -179,6 +181,7 @@ def get_images_characteristics(set_number, set_range):
 
 
 def compare_characteristics(characteristics):
+    results = []
     for characteristic in characteristics:
         image_number, _, iav = characteristic
 
@@ -195,13 +198,53 @@ def compare_characteristics(characteristics):
                 score += abs(iav[i] - av[i])
             scores[comparison_image_number] = score
 
-        print(image_number, min(scores, key=scores.get))
+        results.append(min(scores, key=scores.get))
+    return results
 
 
-def test_set(set_number, set_range):
-    characteristics = get_images_characteristics(set_number, set_range)
-    compare_characteristics(characteristics)
+def get_correct_results(set_number):
+    with open(f'test_sets/set{set_number}/correct.txt', "r") as file:
+        lines = file.readlines()
+
+        result = []
+        for line in lines:
+            result.append(int(line))
+
+        return result
+
+
+def compare_results(results, correct_results):
+    correct = 0
+    results_number = len(correct_results)
+
+    incorrect_ids = []
+
+    for i in range(results_number):
+        if results[i] == correct_results[i]:
+            correct += 1
+        else:
+            incorrect_ids.append(i)
+    return correct, results_number, incorrect_ids
+
+
+def test_set(set_number):
+    characteristics = get_images_characteristics(set_number)
+
+    results = compare_characteristics(characteristics)
+    correct_results = get_correct_results(set_number)
+
+    correct, results_number, incorrect_ids = compare_results(results, correct_results)
+
+    print(f"Set number {set_number}")
+    print(f"Score: {correct}/{results_number}")
+    print("Incorrect ids:", incorrect_ids)
+    print()
+
+
+def test_sets(sets_range):
+    for set_number in range(sets_range):
+        test_set(set_number)
 
 
 if __name__ == "__main__":
-    test_set(1, 20)
+    test_sets(9)

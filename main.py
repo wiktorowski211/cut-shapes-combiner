@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from matplotlib import cm
-
 from scipy.spatial.distance import euclidean
 
 from skimage.io import imread, imshow
@@ -53,10 +51,10 @@ def print_lines(image, edges, lines):
     fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharex=True, sharey=True)
     ax = axes.ravel()
 
-    ax[0].imshow(image, cmap=cm.gray)
+    ax[0].imshow(image, cmap='gray')
     ax[0].set_title('Input image')
 
-    ax[1].imshow(edges, cmap=cm.gray)
+    ax[1].imshow(edges, cmap='gray')
     ax[1].set_title('Canny edges')
 
     ax[2].imshow(edges * 0)
@@ -126,7 +124,7 @@ def deskew(image):
     return rotation
 
 
-def aproximate_values(image, bins=5):
+def approximate_values(image, bins=5):
     max_value = image.shape[0]
     previous_value = max_value
     values = []
@@ -145,18 +143,18 @@ def aproximate_values(image, bins=5):
 
     chunks = np.array_split(values, bins)
 
-    aproximated_values = []
-    inversed_aproximated_values = []
+    approximated_values = []
+    inverted_approximated_values = []
 
     for chunk in chunks:
         median = np.median(chunk)
 
-        aproximated_values.append(median)
-        inversed_aproximated_values.append(max_value - median)
+        approximated_values.append(median)
+        inverted_approximated_values.append(max_value - median)
 
-    inversed_aproximated_values.reverse()
+    inverted_approximated_values.reverse()
 
-    return aproximated_values, inversed_aproximated_values
+    return approximated_values, inverted_approximated_values
 
 
 def test_image(case, number):
@@ -186,9 +184,9 @@ def test_image(case, number):
 
     skeleton = skeletonize(edges)
 
-    approximated_values, inversed_approximated_values = aproximate_values(skeleton, 8)
+    approximated_values, inverted_approximated_values = approximate_values(skeleton, 8)
 
-    return skeleton.std(), approximated_values, inversed_approximated_values
+    return skeleton.std(), approximated_values, inverted_approximated_values
 
 
 def test_case(case_number, case_range):

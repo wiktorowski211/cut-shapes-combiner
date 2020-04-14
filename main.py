@@ -1,9 +1,8 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 from scipy.spatial.distance import euclidean
 
-from skimage.io import imread, imshow
+from skimage.io import imread
 from skimage.filters import threshold_otsu
 from skimage.feature import canny
 from skimage.transform import probabilistic_hough_line, rotate, resize
@@ -28,7 +27,7 @@ def is_upside_down(image, line):
     return up_value and down_value
 
 
-def rotation_for_vertical(image, line):
+def get_rotation_for_vertical(image, line):
     (x1, y1), (x2, y2) = line
     y = int(np.round((y1 + y2) / 2))
     x = int(np.round((x1 + x2) / 2))
@@ -47,31 +46,6 @@ def rotation_for_vertical(image, line):
         return -90.0
 
 
-def print_lines(image, edges, lines):
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharex=True, sharey=True)
-    ax = axes.ravel()
-
-    ax[0].imshow(image, cmap='gray')
-    ax[0].set_title('Input image')
-
-    ax[1].imshow(edges, cmap='gray')
-    ax[1].set_title('Canny edges')
-
-    ax[2].imshow(edges * 0)
-    for line in lines:
-        p0, p1 = line
-        ax[2].plot((p0[0], p1[0]), (p0[1], p1[1]))
-    ax[2].set_xlim((0, image.shape[1]))
-    ax[2].set_ylim((image.shape[0], 0))
-    ax[2].set_title('Probabilistic Hough')
-
-    for a in ax:
-        a.set_axis_off()
-
-    plt.tight_layout()
-    plt.show()
-
-
 def get_line(image):
     thresh = threshold_otsu(image)
     normalize = image > thresh
@@ -84,8 +58,6 @@ def get_line(image):
     while not lines:
         min_line_length = int(min_line_length * 0.9)
         lines = probabilistic_hough_line(edges, seed=16, line_length=min_line_length, line_gap=3)
-
-    #     print_lines(image, edges, lines)
 
     longest_line = None
     longest_line_distance = 0.0
@@ -101,7 +73,7 @@ def get_line(image):
     return longest_line
 
 
-def deskew(image):
+def get_rotation(image):
     line = get_line(image)
     (x1, y1), (x2, y2) = line
 
@@ -110,18 +82,42 @@ def deskew(image):
     rad_angle = np.arctan(slope)
     rotation = np.degrees(rad_angle)
 
-    #     print(line)
-    #     print(slope)
-    #     print(rad_angle)
-    #     print(rotation)
-
     if x1 == x2:
-        rotation += rotation_for_vertical(image, line)
+        rotation += get_rotation_for_vertical(image, line)
     elif is_upside_down(image, line):
         rotation += 180.0
-    # print(rotation)
 
     return rotation
+
+
+def rotate_image(image):
+    rotation = get_rotation(image)
+    rotated = rotate(image, rotation, resize=True)
+    return rotated
+
+
+def trim_image(image):
+    trimmed = image[:, ~np.all(image < 1.0, axis=0)]
+    trimmed = trimmed[~np.all(trimmed < 1.0, axis=1)]
+    trimmed = trimmed[~np.all(trimmed > 0.0, axis=1)]
+    return trimmed
+
+
+def resize_image(image):
+    ratio = 200 / image.shape[1]
+
+    x_size = int(np.round(image.shape[0] * ratio))
+    y_size = int(np.round(image.shape[1] * ratio))
+
+    resized = resize(image, (x_size, y_size), anti_aliasing=False)
+    return resized
+
+
+def binarize_image(image):
+    binary = image.copy()
+    binary[binary > 0.5] = 1.0
+    binary[binary <= 0.5] = 0.0
+    return binary
 
 
 def approximate_values(image, bins=5):
@@ -157,65 +153,55 @@ def approximate_values(image, bins=5):
     return approximated_values, inverted_approximated_values
 
 
-def test_image(case, number):
-    img = imread(f'test_cases/set{case}/{number}.png')
-    rotation = deskew(img)
-    rotated = rotate(img, rotation, resize=True)
+def get_image_characteristic(set_number, image_number):
+    image = imread(f'test_sets/set{set_number}/{image_number}.png')
 
-    if number in []:
-        plt.figure()
-        plt.imshow(rotated, cmap='gray')
-
-    trimmed = rotated[:, ~np.all(rotated < 1.0, axis=0)]
-    trimmed = trimmed[~np.all(trimmed < 1.0, axis=1)]
-    trimmed = trimmed[~np.all(trimmed > 0.0, axis=1)]
-
-    ratio = 200 / trimmed.shape[1]
-    x_size = int(np.round(trimmed.shape[0] * ratio))
-    y_size = int(np.round(trimmed.shape[1] * ratio))
-
-    resized = resize(trimmed, (x_size, y_size), anti_aliasing=False)
-
-    binary = resized.copy()
-    binary[binary > 0.5] = 1.0
-    binary[binary <= 0.5] = 0.0
-
+    rotated = rotate_image(image)
+    trimmed = trim_image(rotated)
+    resized = resize_image(trimmed)
+    binary = binarize_image(resized)
     edges = canny(binary, 0, 1, 1)
-
     skeleton = skeletonize(edges)
 
     approximated_values, inverted_approximated_values = approximate_values(skeleton, 8)
 
-    return skeleton.std(), approximated_values, inverted_approximated_values
+    return approximated_values, inverted_approximated_values
 
 
-def test_case(case_number, case_range):
-    cases = []
-    for i in range(case_range):
-        std, av, iav = test_image(case_number, i)
-        cases.append((i, std, av, iav))
+def get_images_characteristics(set_number, set_range):
+    characteristics = []
 
-    for case in cases:
-        case_number, _, _, iav = case
+    for image_number in range(set_range):
+        av, iav = get_image_characteristic(set_number, image_number)
+        characteristics.append((image_number, av, iav))
+
+    return characteristics
+
+
+def compare_characteristics(characteristics):
+    for characteristic in characteristics:
+        image_number, _, iav = characteristic
 
         scores = {}
 
-        for tested_case in cases:
-            tested_case_number, _, av, _ = tested_case
+        for comparison_characteristic in characteristics:
+            comparison_image_number, av, _ = comparison_characteristic
 
-            if case_number == tested_case_number:
+            if image_number == comparison_image_number:
                 continue
 
             score = 0
-            for x in range(len(iav)):
-                score += abs(iav[x] - av[x])
-            scores[tested_case_number] = score
+            for i in range(len(iav)):
+                score += abs(iav[i] - av[i])
+            scores[comparison_image_number] = score
 
-        if case_number in []:
-            print(scores)
+        print(image_number, min(scores, key=scores.get))
 
-        print(case_number, min(scores, key=scores.get))
+
+def test_set(set_number, set_range):
+    characteristics = get_images_characteristics(set_number, set_range)
+    compare_characteristics(characteristics)
 
 
 if __name__ == "__main__":
-    test_case(0, 6)
+    test_set(1, 20)

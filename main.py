@@ -51,14 +51,14 @@ def get_line(image):
     thresh = threshold_otsu(image)
     normalize = image > thresh
 
-    edges = canny(normalize, 0, 1, 1)
+    edges = canny(normalize, 1.5)
 
-    min_line_length = int(image.shape[0] / 2)
+    min_line_length = int(min(image.shape) / 2)
 
     lines = []
     while not lines:
-        min_line_length = int(min_line_length * 0.9)
         lines = probabilistic_hough_line(edges, seed=16, line_length=min_line_length, line_gap=3)
+        min_line_length = int(min_line_length * 0.9)
 
     longest_line = None
     longest_line_distance = 0.0
@@ -78,16 +78,9 @@ def get_rotation(image):
     line = get_line(image)
     (x1, y1), (x2, y2) = line
 
-    slope = (y2 - y1) / (x2 - x1) if (x2 - x1) else 0
-
-    rad_angle = np.arctan(slope)
-    rotation = np.degrees(rad_angle)
-
-    if x1 == x2:
-        rotation += get_rotation_for_vertical(image, line)
-    elif is_upside_down(image, line):
-        rotation += 180.0
-
+    rad_angle2 = np.arctan2(y2-y1, x2-x1)
+    
+    rotation = np.degrees(rad_angle2)
     return rotation
 
 
@@ -98,21 +91,16 @@ def rotate_image(image):
 
 
 def trim_image(image):
-    trimmed = image[:, ~np.all(image < 1.0, axis=0)]
-    trimmed = trimmed[~np.all(trimmed < 1.0, axis=1)]
+    trimmed = image[:, ~np.all(image < 0.5, axis=0)]
+    trimmed = trimmed[~np.all(trimmed < 0.5, axis=1)]
     trimmed = trimmed[~np.all(trimmed > 0.0, axis=1)]
     return trimmed
 
-
-def resize_image(image):
-    ratio = 200 / image.shape[1]
-
-    x_size = int(np.round(image.shape[0] * ratio))
-    y_size = int(np.round(image.shape[1] * ratio))
-
-    resized = resize(image, (x_size, y_size), anti_aliasing=False)
-    return resized
-
+def fix_upside_down(image):
+    if np.count_nonzero(image[0, :]) > image.shape[1]/2:
+        return np.flip(image)
+    else:
+        return image
 
 def binarize_image(image):
     binary = image.copy()
@@ -122,15 +110,16 @@ def binarize_image(image):
 
 
 def approximate_values(image, bins=5):
-    max_value = image.shape[0]
-    previous_value = max_value
+    max_value = 100
+    normalized_ratio = 100./image.shape[0]
+    previous_value = 0.
     values = []
 
     for i in range(image.shape[1]):
         column = image[:, i]
 
         if np.any(column):
-            current_value = max_value - np.argmax(column)
+            current_value = max_value - np.argmax(column)*normalized_ratio
         else:
             current_value = previous_value
 
@@ -159,12 +148,10 @@ def get_image_characteristic(set_number, image_number):
 
     rotated = rotate_image(image)
     trimmed = trim_image(rotated)
-    resized = resize_image(trimmed)
-    binary = binarize_image(resized)
-    edges = canny(binary, 0, 1, 1)
-    skeleton = skeletonize(edges)
+    fixed = fix_upside_down(trimmed)
+    binary = binarize_image(fixed)
 
-    approximated_values, inverted_approximated_values = approximate_values(skeleton, 8)
+    approximated_values, inverted_approximated_values = approximate_values(binary, 10)
 
     return approximated_values, inverted_approximated_values
 
@@ -194,9 +181,11 @@ def compare_characteristics(characteristics):
                 continue
 
             score = 0
+            scorez = []
             for i in range(len(iav)):
                 score += abs(iav[i] - av[i])
-            scores[comparison_image_number] = score
+                scorez.append((iav[i] - av[i]))
+            scores[comparison_image_number] = np.std(scorez)
 
         results.append(min(scores, key=scores.get))
     return results

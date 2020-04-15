@@ -166,13 +166,12 @@ def get_images_characteristics(set_number):
 
     return characteristics
 
-
-def compare_characteristics(characteristics):
+def compare_characteristics(characteristics, ranking_len=15):
     results = []
     for characteristic in characteristics:
         image_number, _, iav = characteristic
 
-        scores = {}
+        scores = []
 
         for comparison_characteristic in characteristics:
             comparison_image_number, av, _ = comparison_characteristic
@@ -185,9 +184,12 @@ def compare_characteristics(characteristics):
             for i in range(len(iav)):
                 score += abs(iav[i] - av[i])
                 scorez.append((iav[i] - av[i]))
-            scores[comparison_image_number] = np.std(scorez)
+            scores.append((comparison_image_number, np.std(scorez)))
+        scores.sort(key=lambda x: x[1])
+        scores = scores[:ranking_len]
+        scores = list(map(lambda x: x[0], scores))
 
-        results.append(min(scores, key=scores.get))
+        results.append(scores)
     return results
 
 
@@ -209,17 +211,25 @@ def compare_results(results, correct_results):
     incorrect_ids = []
 
     for i in range(results_number):
-        if results[i] == correct_results[i]:
-            correct += 1
-        else:
+        n = 1
+        found = False
+        for result in results[i]:
+            if result == correct_results[i]:
+                correct += 1/n
+                found = True if n == 1 else False
+                break
+            n+=1
+        if not found:
             incorrect_ids.append(i)
+            correct += 1/(results_number-1)
+
     return correct, results_number, incorrect_ids
 
 
 def test_set(set_number):
     characteristics = get_images_characteristics(set_number)
 
-    results = compare_characteristics(characteristics)
+    results = compare_characteristics(characteristics, ranking_len=15)
     correct_results = get_correct_results(set_number)
 
     correct, results_number, incorrect_ids = compare_results(results, correct_results)
